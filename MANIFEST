@@ -1,0 +1,13 @@
+Changes
+MANIFEST
+Makefile.PL
+README
+lib/Object/Event.pm
+t/00-load.t
+t/pod-coverage.t
+t/pod.t
+t/01_simple_events.t
+t/02_stop_event.t
+t/03_event_within.t
+samples/simple_example
+META.yml                                 Module meta-data (added by MakeMaker)

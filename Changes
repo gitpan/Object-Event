@@ -1,0 +1,15 @@
+Revision history for Object-Event
+
+0.4 Tue Apr 15 12:48:11 CEST 2008
+        - events can now be registered from within the
+          callbacks for the same object and event safely.
+
+0.3 Fri Mar 21 11:35:03 CET 2008
+        - fixed a serious bug in stop_event
+
+0.2 Fri Mar 21 01:38:12 CET 2008
+        - forgot a simple test for the event handling
+        - added an example
+
+0.1 Thu Mar 20 13:18:12 CET 2008
+        - initial release
