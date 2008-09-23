@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Object-Event
-version:             0.4
+version:             0.6
 abstract:            A class that provides an event callback interface
 license:             perl
 author:              
