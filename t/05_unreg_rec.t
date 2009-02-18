@@ -40,4 +40,4 @@ $f->event ('test2');
 $f->event ('test2');
 
 is ($a, 1, 'first callback was called once');
-is ($b, 1, 'first callback was called once');
+is ($b, 1, 'second callback was called once');

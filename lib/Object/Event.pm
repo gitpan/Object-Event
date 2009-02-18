@@ -8,11 +8,11 @@ Object::Event - A class that provides an event callback interface
 
 =head1 VERSION
 
-Version 0.6
+Version 0.7
 
 =cut
 
-our $VERSION = '0.6';
+our $VERSION = '0.7';
 
 =head1 SYNOPSIS
 
@@ -36,8 +36,8 @@ our $VERSION = '0.6';
 
 This module was mainly written for L<Net::XMPP2>, L<Net::IRC3>,
 L<AnyEvent::HTTPD> and L<BS> to provide a consistent API for registering and
-emitting events.  Even though I originally wrote it for those modules I relased
-it seperately in case anyone may find this module useful.
+emitting events.  Even though I originally wrote it for those modules I released
+it separately in case anyone may find this module useful.
 
 For more comprehensive event handling see also L<Glib> and L<POE>.
 
@@ -45,6 +45,10 @@ This class provides a simple way to extend a class, by inheriting from
 this class, with an event callback interface.
 
 You will be able to register callbacks for event names and call them later.
+
+B<NOTE:> This is the last release that will come with C<add_forward>.
+The next L<Object::Event> release will contain some minor incompatible
+changes.
 
 =head1 PERFORMANCE
 
@@ -60,7 +64,7 @@ as other technologies like XML already waste a lot more CPU cycles.
 =item B<new (%hashcontent)>
 
 This is a convenience constructor. It will create a blessed
-hashreference initialized with C<%hashcontent>.
+hash reference initialized with C<%hashcontent>.
 
 =cut
 
@@ -101,7 +105,7 @@ will be appended and returned by the C<event> method.
 
 For every event there will also be two other event callbacks called:
 
-Before the callbacks for C<$eventname> is being exectued the callback for
+Before the callbacks for C<$eventname> is being executed the callback for
 C<"before_$eventname"> is being called.
 And after the callbacks for C<$eventname> have been run, the callback
 C<"after_$eventname"> is being called.
@@ -139,21 +143,25 @@ sub reg_cb {
 
    while (@regs) {
       my ($cmd, $cb) = (shift @regs, shift @regs);
+
+      next if $cmd eq '_while_referenced';
+
       my $arg = [$self->{_ev_id}, $cb];
 
       if (defined $while_ref) {
          push @$arg, (1, $while_ref);
+         weaken $arg->[3];
       }
 
       push @{$self->{__bsev_events}->{$cmd}}, $arg;
-
-      if ($arg->[2]) {
-         weaken $arg->[3];
-      }
    }
 
    $self->{_ev_id}
 }
+
+=item B<unreg_cb ($cb)>
+
+Removes the callback C<$cb> from the set of registered callbacks.
 
 =item B<unreg_cb ($id)>
 
@@ -165,11 +173,21 @@ return value of a C<reg_cb> call.
 sub unreg_cb {
    my ($self, $id) = @_;
 
-   for my $key (keys %{$self->{__bsev_events}}) {
-      @{$self->{__bsev_events}->{$key}} =
-         grep {
-            $_->[0] ne $id
-         } @{$self->{__bsev_events}->{$key}};
+   if (ref $id) {
+      for my $key (keys %{$self->{__bsev_events}}) {
+         @{$self->{__bsev_events}->{$key}} =
+            grep {
+               $_->[1] ne $id
+            } @{$self->{__bsev_events}->{$key}};
+      }
+     
+   } else {
+      for my $key (keys %{$self->{__bsev_events}}) {
+         @{$self->{__bsev_events}->{$key}} =
+            grep {
+               $_->[0] ne $id
+            } @{$self->{__bsev_events}->{$key}};
+      }
    }
 }
 
@@ -334,6 +352,20 @@ sub unreg_me {
    }
 }
 
+=item B<unreg_my_set>
+
+This method will remove all callbacks registered together with the currently
+executed callback.
+
+=cut
+
+sub unreg_my_set {
+   my ($self) = @_;
+
+   my ($ev, $rev) = @{$self->{__bsev_cb_state}->{cur_ev}};
+   $self->unreg_cb ($rev->[0]);
+}
+
 =item B<stop_event>
 
 When called in a 'before_' event callback then the execution of the
@@ -419,9 +451,13 @@ sub events_as_string_dump {
 
 Robin Redeker, C<< <elmex at ta-sa.org> >>, JID: C<< <elmex at jabber.org> >>
 
+=head1 ACKNOWLEDGEMENTS
+
+Thanks to Pedro Melo for fixes and tests.
+
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2007 Robin Redeker, all rights reserved.
+Copyright 2007-2009 Robin Redeker, all rights reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

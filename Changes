@@ -1,6 +1,17 @@
 Revision history for Object-Event
 
-0.5 Tue Sep 23 15:13:23 CEST 2008
+0.7 Wed Feb 18 11:56:40 CET 2009
+        NOTE: This is the last release which will contain the add_forward
+        feature. The next release will contain some minor incompatible changes.
+
+        - added unreg_my_set method.
+        - fixed bug in _while_referenced implementation
+          and added tests (by Pedro Melo)
+        - some more tests.
+        - added ::Methods syntactic sugar. Please note that the next
+          version might contain some incompatible changes here.
+
+0.6 Tue Sep 23 15:13:23 CEST 2008
         - recursive event calling now also should work properly.
 
 0.4 Tue Apr 15 12:48:11 CEST 2008

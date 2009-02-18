@@ -2,7 +2,7 @@ NAME
     Object::Event - A class that provides an event callback interface
 
 VERSION
-    Version 0.6
+    Version 0.7
 
 SYNOPSIS
        package foo;
@@ -25,7 +25,7 @@ DESCRIPTION
     This module was mainly written for Net::XMPP2, Net::IRC3,
     AnyEvent::HTTPD and BS to provide a consistent API for registering and
     emitting events. Even though I originally wrote it for those modules I
-    relased it seperately in case anyone may find this module useful.
+    released it separately in case anyone may find this module useful.
 
     For more comprehensive event handling see also Glib and POE.
 
@@ -34,6 +34,9 @@ DESCRIPTION
 
     You will be able to register callbacks for event names and call them
     later.
+
+    NOTE: This is the last release that will come with "add_forward". The
+    next Object::Event release will contain some minor incompatible changes.
 
 PERFORMANCE
     In the first version as presented here no special performance
@@ -44,8 +47,8 @@ PERFORMANCE
 
 METHODS
     new (%hashcontent)
-        This is a convenience constructor. It will create a blessed
-        hashreference initialized with %hashcontent.
+        This is a convenience constructor. It will create a blessed hash
+        reference initialized with %hashcontent.
 
     set_exception_cb ($cb)
         This method installs a callback that will be called when some other
@@ -68,7 +71,7 @@ METHODS
 
         For every event there will also be two other event callbacks called:
 
-        Before the callbacks for $eventname is being exectued the callback
+        Before the callbacks for $eventname is being executed the callback
         for "before_$eventname" is being called. And after the callbacks for
         $eventname have been run, the callback "after_$eventname" is being
         called.
@@ -93,6 +96,9 @@ METHODS
 
         Whenever the "disconnect" event is emitted now and $window doesn't
         exist anymore the callback will be removed.
+
+    unreg_cb ($cb)
+        Removes the callback $cb from the set of registered callbacks.
 
     unreg_cb ($id)
         Removes the set $id of registered callbacks. $id is the return value
@@ -136,6 +142,10 @@ METHODS
         the callback (i.e. $self) the callback will be deleted after it is
         finished.
 
+    unreg_my_set
+        This method will remove all callbacks registered together with the
+        currently executed callback.
+
     stop_event
         When called in a 'before_' event callback then the execution of the
         event is stopped after all 'before_' callbacks have been run.
@@ -170,8 +180,11 @@ METHODS
 AUTHOR
     Robin Redeker, "<elmex at ta-sa.org>", JID: "<elmex at jabber.org>"
 
+ACKNOWLEDGEMENTS
+    Thanks to Pedro Melo for fixes and tests.
+
 COPYRIGHT & LICENSE
-    Copyright 2007 Robin Redeker, all rights reserved.
+    Copyright 2007-2009 Robin Redeker, all rights reserved.
 
     This program is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself.

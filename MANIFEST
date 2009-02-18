@@ -3,13 +3,15 @@ MANIFEST
 Makefile.PL
 README
 lib/Object/Event.pm
+lib/Object/Event/Methods.pm
 t/00-load.t
-t/pod-coverage.t
-t/pod.t
 t/01_simple_events.t
 t/02_stop_event.t
 t/03_event_within.t
 t/04_recursive.t
 t/05_unreg_rec.t
+t/07_while_referenced.t
+t/08_methods.t
+t/09_methods2.t
 samples/simple_example
 META.yml                                 Module meta-data (added by MakeMaker)
