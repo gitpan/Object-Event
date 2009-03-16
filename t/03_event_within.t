@@ -1,4 +1,4 @@
-#!perl -T
+#!perl
 
 use Test::More tests => 2;
 
@@ -7,6 +7,7 @@ use strict;
 no warnings;
 
 use Object::Event;
+$Object::Event::ENABLE_METHODS_DEFAULT = $ENV{OE_METHODS_ENABLE};
 
 our @ISA = qw/Object::Event/;
 
@@ -25,9 +26,11 @@ $f->reg_cb (
       $f->unreg_me;
 
       $f->reg_cb (test => sub {
+         my ($f) = @_;
          $b++;
          $f->unreg_me;
       });
+      ()
    }
 );
 

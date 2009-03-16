@@ -6,7 +6,7 @@ package foo;
 use strict;
 no warnings;
 
-use base qw/Object::Event::Methods/;
+use base qw/Object::Event/;
 
 sub test {
    my ($self, $a, $b) = @_;
@@ -19,7 +19,7 @@ package main;
 use strict;
 no warnings;
 
-my $f = foo->new;
+my $f = foo->new (enable_methods => 1);
 
 $f->test (10, 20);
 

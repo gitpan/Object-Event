@@ -9,9 +9,10 @@ WriteMakefile(
     VERSION_FROM        => 'lib/Object/Event.pm',
     ABSTRACT_FROM       => 'lib/Object/Event.pm',
     PL_FILES            => {},
+    test                => { TESTS => "t/*.t t/methds/*.t" },
     PREREQ_PM => {
         'Test::More'   => 0,
-        'Scalar::Util' => 0,
+        'AnyEvent'     => 3.5,
     },
     dist                => {
        COMPRESS => 'gzip -9f',

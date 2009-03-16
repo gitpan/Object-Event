@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Object-Event
-version:            0.7
+version:            1.0
 abstract:           A class that provides an event callback interface
 author:
     - Robin Redeker <elmex@x-paste.de>
@@ -9,8 +9,8 @@ distribution_type:  module
 configure_requires:
     ExtUtils::MakeMaker:  0
 requires:
-    Scalar::Util:  0
-    Test::More:    0
+    AnyEvent:    3.5
+    Test::More:  0
 no_index:
     directory:
         - t

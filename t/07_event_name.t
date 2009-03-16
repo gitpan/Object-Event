@@ -17,23 +17,12 @@ no warnings;
 
 my $f = foo->new;
 
-my $a = 0;
 $f->reg_cb (
-   test => sub {
+   test123 => sub {
       my ($f) = @_;
-
-      $a++;
-
-      if ($a == 1) {
-         $f->event ('test');
-      } elsif ($a == 2) {
-         $f->unreg_me;
-      }
+      $f->{name} = $f->event_name;
    }
 );
 
-$f->event ('test');
-$f->event ('test');
-$f->event ('test');
-
-is ($a, 2, 'first callback was called twice');
+$f->event ('test123');
+is ($f->{name}, 'test123', 'event_name method returns event name');

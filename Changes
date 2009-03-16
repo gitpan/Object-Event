@@ -1,4 +1,13 @@
-Revision history for Object-Event
+Revision history for Object-Event:
+
+1.0 Mon Mar 16 21:23:02 CET 2009
+        - added stop/continue feature.
+        - deprecated forward feature.
+          (will be kept until AnyEvent::XMPP 0.4 is replaced by the new
+           AnyEvent::XMPP, in around 1 year probably.)
+        - added support for arbitrary priorities.
+        - added syntactic sugar for using method calling syntax
+          as event invocation.
 
 0.7 Wed Feb 18 11:56:40 CET 2009
         NOTE: This is the last release which will contain the add_forward

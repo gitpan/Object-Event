@@ -7,6 +7,7 @@ use strict;
 no warnings;
 
 use Object::Event;
+$Object::Event::ENABLE_METHODS_DEFAULT = $ENV{OE_METHODS_ENABLE};
 
 our @ISA = qw/Object::Event/;
 

@@ -3,15 +3,20 @@ MANIFEST
 Makefile.PL
 README
 lib/Object/Event.pm
-lib/Object/Event/Methods.pm
 t/00-load.t
 t/01_simple_events.t
 t/02_stop_event.t
 t/03_event_within.t
 t/04_recursive.t
 t/05_unreg_rec.t
-t/07_while_referenced.t
-t/08_methods.t
-t/09_methods2.t
+t/08_priorities.t
+t/06_unreg_guard.t
+t/07_event_name.t
+t/10_continue.t
+t/12_prio.t
+t/13_methods.t
+t/14_methods2.t
+t/15_methods_subc.t
 samples/simple_example
+samples/benchmark
 META.yml                                 Module meta-data (added by MakeMaker)

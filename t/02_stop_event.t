@@ -1,4 +1,4 @@
-#!perl -T
+#!perl
 
 use Test::More tests => 25;
 
@@ -7,6 +7,7 @@ use strict;
 no warnings;
 
 use Object::Event;
+$Object::Event::ENABLE_METHODS_DEFAULT = $ENV{OE_METHODS_ENABLE};
 
 our @ISA = qw/Object::Event/;
 
@@ -71,4 +72,3 @@ is ($ext_before, 1, 'ext_before has been executed');
 is ($event,      1, 'event has been executed');
 is ($ext_after,  1, 'ext_after has not been executed');
 is ($after,      0, 'after has not been executed');
-
