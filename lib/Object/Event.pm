@@ -12,11 +12,11 @@ Object::Event - A class that provides an event callback interface
 
 =head1 VERSION
 
-Version 1.0
+Version 1.1
 
 =cut
 
-our $VERSION = '1.0';
+our $VERSION = '1.1';
 
 =head1 SYNOPSIS
 
@@ -41,7 +41,7 @@ our $VERSION = '1.0';
 
 =head1 DESCRIPTION
 
-This module was mainly written for L<Net::XMPP2>, L<Net::IRC3>,
+This module was mainly written for L<AnyEvent::XMPP>, L<AnyEvent::IRC>,
 L<AnyEvent::HTTPD> and L<BS> to provide a consistent API for registering and
 emitting events.  Even though I originally wrote it for those modules I released
 it separately in case anyone may find this module useful.
@@ -53,9 +53,12 @@ this class, with an event callback interface.
 
 You will be able to register callbacks for events, identified by their names (a
 string) and call them later by invoking the C<event> method with the event name
-and some arguments. For each invoked event a event object, derived from
-L<Object::Event::Event> will be generated, which you can use to influence the
-way the event callbacks are called.
+and some arguments. 
+
+There is even a syntactic sugar which allows to call methods on the
+instances of a from L<Object::Event>-derived class, to invoke events.
+See C<enable_methods> below. For this feature please also consult the
+test cases in the distribution for examples.
 
 =head1 PERFORMANCE
 
@@ -132,21 +135,36 @@ an event callback is registered with C<reg_cb>.
 
 sub new {
    my $this  = shift;
-   my $class = ref($this) || $this;
-   my $self  = {
-      enable_methods => $ENABLE_METHODS_DEFAULT,
-      @_,
-   };
+   my $class = ref ($this) || $this;
+   my $self  = { @_ };
    bless $self, $class;
+
+   $self->init_object_events;
+
+   return $self
+}
+
+=item $obj->init_object_events ()
+
+This method should only be called if you are not able to call the C<new>
+constructor of this class.
+
+=cut
+
+sub init_object_events {
+   my ($self) = @_;
+
+   unless (defined $self->{enable_methods}) {
+      $self->{enable_methods} = $ENABLE_METHODS_DEFAULT;
+   }
 
    if ($self->{enable_methods}) {
       no strict 'refs';
+      my $class = ref $self;
       for my $ev (keys %{"$class\::__OE_INHERITED_METHODS"}) {
          $self->_check_method ($ev)
       }
    }
-
-   return $self
 }
 
 =item $obj->set_exception_cb ($cb->($exception, $eventname))
@@ -178,9 +196,21 @@ always be the master object C<$obj>. If you want to have the event object
 C<$ev> (which represents an event which was sent by the C<event> method) as
 first argument use the C<reg_event_cb> method.
 
-The callbacks will be called in an array context. If a callback doesn't want to
-return any value it should return an empty list. All results from the callbacks
-will be appended and returned by the C<event> method.
+The return value of the callbacks are ignored. If you need to pass
+any information from a handler to the caller of the event you have to
+establish your own "protocol" to do this. I recommend to pass an array
+reference to the handlers:
+
+   $obj->reg_cb (event_foobar => sub {
+      my ($self, $results) = @_;
+      push @$results, time / 30;
+   });
+
+   my @results;
+   $obj->event (event_foobar => \@results);
+   for (@results) {
+      # ...
+   }
 
 The order of the callbacks in the call chain of the event depends on their
 priority. If you didn't specify any priority (see below) they get the default
@@ -248,7 +278,7 @@ sub reg_cb {
    }
 
    defined wantarray
-      ? \(my $g = guard { $self->unreg_cb ($_) for @cbs })
+      ? \(my $g = guard { if ($self) { $self->unreg_cb ($_) for @cbs } })
       : ()
 }
 
@@ -277,10 +307,12 @@ sub unreg_cb {
 =item $obj->event ($eventname, @args)
 
 Emits the event C<$eventname> and passes the arguments C<@args> to the
-callbacks. The return value is an object which is derived from
-L<Object::Event::Event>, and acts as handle to this event invocation.
+callbacks. The return value is a true value in case some handler was found
+and run. It returns false if no handler was found (see also the C<handles>
+method below). Basically: It returns the same value as the C<handles> method.
 
-See also the alternate form to call C<event> below.
+Please note that an event can be stopped and reinvoked while it is being
+handled.
 
 See also the specification of the before and after events in C<reg_cb> above.
 
@@ -290,15 +322,15 @@ same event that is executed at the moment, it will be called the B<next> time
 when the event is emitted. Example:
 
    $obj->reg_cb (event_test => sub {
-      my ($ev) = @_;
+      my ($obj) = @_;
 
       print "Test1\n";
-      $ev->unreg_me;
+      $obj->unreg_me;
 
       $obj->reg_cb (event_test => sub {
-         my ($ev) = @_;
+         my ($obj) = @_;
          print "Test2\n";
-         $ev->unreg_me;
+         $obj->unreg_me;
       });
    });
 
@@ -356,7 +388,8 @@ sub _check_method {
                warn "unhandled callback exception on event ($ev, $self, @arg): $@\n";
             }
          }
-         ()
+
+         @cbs > 0
       };
    }
 }
@@ -428,7 +461,26 @@ sub event {
       }
    }
 
-   ()
+   @cbs > 0
+}
+
+=item my $bool = $obj->handles ($eventname)
+
+This method returns true if any event handler (either registered via C<reg_cb>
+or by a method definition if C<enable_methods> is enabled) has been setup for
+the event C<$eventname>.
+
+It returns false if that is not the case.
+
+=cut
+
+sub handles {
+   my ($self, $ev) = @_;
+
+   $self->_check_method ($ev) if $self->{enable_methods};
+
+   exists $self->{__oe_events}->{$ev}
+      && @{$self->{__oe_events}->{$ev}} > 0
 }
 
 =item $obj->event_name
@@ -480,7 +532,7 @@ sub stop_event {
    $self->{__oe_forward_stop} = 1;
 
    @{$self->{__oe_cbs}->[0]} = ();
-   
+
    $r
 }
 
@@ -658,6 +710,13 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Object-Event>
 L<http://search.cpan.org/dist/Object-Event>
 
 =back
+
+=head1 ACKNOWLEDGEMENTS
+
+Thanks go to:
+
+  - Mons Anderson for suggesting the 'handles' method and
+    the return value of the 'event' method and reporting bugs.
 
 =head1 COPYRIGHT & LICENSE
 

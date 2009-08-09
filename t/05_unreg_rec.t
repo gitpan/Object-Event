@@ -1,6 +1,6 @@
 #!perl
 
-use Test::More tests => 2;
+use Test::More tests => 6;
 
 package foo;
 use strict;
@@ -35,10 +35,16 @@ $f->reg_cb (
    }
 );
 
+ok ($f->handles ('test'),  "handles 'test'");
+ok ($f->handles ('test2'), "handles 'test2'");
+
 $f->event ('test');
 $f->event ('test');
 $f->event ('test2');
 $f->event ('test2');
+
+ok (!$f->handles ('test'),  "doesn't handle 'test'");
+ok (!$f->handles ('test2'), "doesn't handle 'test2'");
 
 is ($a, 1, 'first callback was called once');
 is ($b, 1, 'second callback was called once');

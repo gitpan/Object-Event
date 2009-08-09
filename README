@@ -2,7 +2,7 @@ NAME
     Object::Event - A class that provides an event callback interface
 
 VERSION
-    Version 1.0
+    Version 1.1
 
 SYNOPSIS
        package foo;
@@ -24,7 +24,7 @@ SYNOPSIS
        $regguard = undef;
 
 DESCRIPTION
-    This module was mainly written for Net::XMPP2, Net::IRC3,
+    This module was mainly written for AnyEvent::XMPP, AnyEvent::IRC,
     AnyEvent::HTTPD and BS to provide a consistent API for registering and
     emitting events. Even though I originally wrote it for those modules I
     released it separately in case anyone may find this module useful.
@@ -36,9 +36,12 @@ DESCRIPTION
 
     You will be able to register callbacks for events, identified by their
     names (a string) and call them later by invoking the "event" method with
-    the event name and some arguments. For each invoked event a event
-    object, derived from Object::Event::Event will be generated, which you
-    can use to influence the way the event callbacks are called.
+    the event name and some arguments.
+
+    There is even a syntactic sugar which allows to call methods on the
+    instances of a from Object::Event-derived class, to invoke events. See
+    "enable_methods" below. For this feature please also consult the test
+    cases in the distribution for examples.
 
 PERFORMANCE
     In the first version as presented here no special performance
@@ -76,6 +79,10 @@ METHODS
             method's code as priority 0 event callback. The replacement will
             happen whenever an event callback is registered with "reg_cb".
 
+    $obj->init_object_events ()
+        This method should only be called if you are not able to call the
+        "new" constructor of this class.
+
     $obj->set_exception_cb ($cb->($exception, $eventname))
         This method installs a callback that will be called when some other
         event callback threw an exception. The first argument to $cb will be
@@ -96,10 +103,21 @@ METHODS
         the event object $ev (which represents an event which was sent by
         the "event" method) as first argument use the "reg_event_cb" method.
 
-        The callbacks will be called in an array context. If a callback
-        doesn't want to return any value it should return an empty list. All
-        results from the callbacks will be appended and returned by the
-        "event" method.
+        The return value of the callbacks are ignored. If you need to pass
+        any information from a handler to the caller of the event you have
+        to establish your own "protocol" to do this. I recommend to pass an
+        array reference to the handlers:
+
+           $obj->reg_cb (event_foobar => sub {
+              my ($self, $results) = @_;
+              push @$results, time / 30;
+           });
+
+           my @results;
+           $obj->event (event_foobar => \@results);
+           for (@results) {
+              # ...
+           }
 
         The order of the callbacks in the call chain of the event depends on
         their priority. If you didn't specify any priority (see below) they
@@ -124,10 +142,13 @@ METHODS
 
     $obj->event ($eventname, @args)
         Emits the event $eventname and passes the arguments @args to the
-        callbacks. The return value is an object which is derived from
-        Object::Event::Event, and acts as handle to this event invocation.
+        callbacks. The return value is a true value in case some handler was
+        found and run. It returns false if no handler was found (see also
+        the "handles" method below). Basically: It returns the same value as
+        the "handles" method.
 
-        See also the alternate form to call "event" below.
+        Please note that an event can be stopped and reinvoked while it is
+        being handled.
 
         See also the specification of the before and after events in
         "reg_cb" above.
@@ -138,20 +159,27 @@ METHODS
         will be called the next time when the event is emitted. Example:
 
            $obj->reg_cb (event_test => sub {
-              my ($ev) = @_;
+              my ($obj) = @_;
 
               print "Test1\n";
-              $ev->unreg_me;
+              $obj->unreg_me;
 
               $obj->reg_cb (event_test => sub {
-                 my ($ev) = @_;
+                 my ($obj) = @_;
                  print "Test2\n";
-                 $ev->unreg_me;
+                 $obj->unreg_me;
               });
            });
 
            $obj->event ('event_test'); # prints "Test1"
            $obj->event ('event_test'); # prints "Test2"
+
+    my $bool = $obj->handles ($eventname)
+        This method returns true if any event handler (either registered via
+        "reg_cb" or by a method definition if "enable_methods" is enabled)
+        has been setup for the event $eventname.
+
+        It returns false if that is not the case.
 
     $obj->event_name
         Returns the name of the currently executed event.
@@ -247,6 +275,12 @@ SUPPORT
     *   Search CPAN
 
         <http://search.cpan.org/dist/Object-Event>
+
+ACKNOWLEDGEMENTS
+    Thanks go to:
+
+      - Mons Anderson for suggesting the 'handles' method and
+        the return value of the 'event' method and reporting bugs.
 
 COPYRIGHT & LICENSE
     Copyright 2009 Robin Redeker, all rights reserved.

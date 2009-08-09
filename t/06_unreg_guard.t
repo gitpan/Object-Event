@@ -1,6 +1,6 @@
 #!perl
 
-use Test::More tests => 2;
+use Test::More tests => 4;
 
 package foo;
 use strict;
@@ -24,9 +24,12 @@ my $id = $f->reg_cb (test => sub { $called += $_[1] });
 $f->event (test => 10);
 
 is ($called, 10, "first test called once");
+ok ($f->handles ('test'), "got a handler");
 
 $f->unreg_cb ($id);
 
 $f->event (test => 20);
 
 is ($called, 10, "second test still called once");
+
+ok (!$f->handles ('test'), "no handler anymore");

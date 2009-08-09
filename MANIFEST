@@ -19,4 +19,5 @@ t/14_methods2.t
 t/15_methods_subc.t
 samples/simple_example
 samples/benchmark
+samples/mass_example
 META.yml                                 Module meta-data (added by MakeMaker)
