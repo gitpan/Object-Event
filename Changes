@@ -1,5 +1,10 @@
 Revision history for Object-Event:
 
+1.101   Fri Sep  4 14:24:58 CEST 2009
+        - fixed stupid bug in event method, returning always false
+          (added test for that now).
+        - using common::sense now.
+
 1.1     Sun Aug  9 18:05:08 CEST 2009
         - fixed some really wrong documentation (i.e.: about return values of
           the event method).

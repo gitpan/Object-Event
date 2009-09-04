@@ -1,10 +1,9 @@
 #!perl
 
-use Test::More tests => 6;
+use Test::More tests => 7;
 
 package foo;
-use strict;
-no warnings;
+use common::sense;
 
 use base qw/Object::Event/;
 
@@ -14,8 +13,7 @@ sub test {
 }
 
 package main;
-use strict;
-no warnings;
+use common::sense;
 
 my $f  = foo->new (enable_methods => 1);
 my $f2 = foo->new (enable_methods => 1);
@@ -36,3 +34,5 @@ $f->foobar;
 $f2->foobar;
 is ($f->{b}, 10, 'first object got method with event callback');
 is ($f2->{b}, undef, 'second object doesn\'t have method with event callback');
+
+ok ($f->event ('test'), 'event returns true for methods');

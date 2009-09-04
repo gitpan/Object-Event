@@ -3,8 +3,7 @@
 use Test::More tests => 5;
 
 package foo;
-use strict;
-no warnings;
+use common::sense;
 
 use base qw/Object::Event/;
 
@@ -16,8 +15,7 @@ sub test {
 sub reset { (shift)->{res} = 0 }
 
 package main;
-use strict;
-no warnings;
+use common::sense;
 
 my $f = foo->new (enable_methods => 1);
 

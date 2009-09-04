@@ -1,8 +1,7 @@
 #!perl
 
 package foo;
-use strict;
-no warnings;
+use common::sense;
 
 use base qw/Object::Event/;
 
@@ -16,8 +15,7 @@ our $cnt;
 sub test { $cnt++ }
 
 package main;
-use strict;
-no warnings;
+use common::sense;
 
 use Benchmark qw/:all/;
 

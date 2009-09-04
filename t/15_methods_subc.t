@@ -3,8 +3,7 @@
 use Test::More tests => 5;
 
 package first;
-use strict;
-no warnings;
+use common::sense;
 
 use base qw/Object::Event/;
 
@@ -21,8 +20,7 @@ sub test3 {
 }
 
 package pre;
-use strict;
-no warnings;
+use common::sense;
 
 use base qw/first/;
 
@@ -35,8 +33,7 @@ sub test2 {
 }
 
 package foo;
-use strict;
-no warnings;
+use common::sense;
 
 use base qw/Object::Event/;
 
@@ -46,8 +43,7 @@ sub test {
 }
 
 package bar;
-use strict;
-no warnings;
+use common::sense;
 
 use base qw/foo pre/;
 
@@ -64,8 +60,7 @@ sub test2 {
 }
 
 package main;
-use strict;
-no warnings;
+use common::sense;
 
 my $f = foo->new (enable_methods => 1);
 my $b = bar->new (enable_methods => 1);

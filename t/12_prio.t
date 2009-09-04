@@ -3,8 +3,7 @@
 use Test::More tests => 1;
 
 package foo;
-use strict;
-no warnings;
+use common::sense;
 
 use Object::Event;
 $Object::Event::ENABLE_METHODS_DEFAULT = $ENV{OE_METHODS_ENABLE};
@@ -12,11 +11,9 @@ $Object::Event::ENABLE_METHODS_DEFAULT = $ENV{OE_METHODS_ENABLE};
 our @ISA = qw/Object::Event/;
 
 package main;
-use strict;
-no warnings;
+use common::sense;
 
 # obfuscation around update_test
-no strict 'refs';
 my $oe = 'Object' . '::' . 'Event';
 &{$oe. '::' . 'register_priority_alias'} ('first', 3000);
 &{$oe. '::' . 'register_priority_alias'} ('last', -3000);

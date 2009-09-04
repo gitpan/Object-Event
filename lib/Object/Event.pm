@@ -1,6 +1,5 @@
 package Object::Event;
-use strict;
-no warnings;
+use common::sense;
 use Carp qw/croak/;
 use AnyEvent::Util qw/guard/;
 
@@ -12,11 +11,11 @@ Object::Event - A class that provides an event callback interface
 
 =head1 VERSION
 
-Version 1.1
+Version 1.101
 
 =cut
 
-our $VERSION = '1.1';
+our $VERSION = '1.101';
 
 =head1 SYNOPSIS
 
@@ -159,7 +158,6 @@ sub init_object_events {
    }
 
    if ($self->{enable_methods}) {
-      no strict 'refs';
       my $class = ref $self;
       for my $ev (keys %{"$class\::__OE_INHERITED_METHODS"}) {
          $self->_check_method ($ev)
@@ -343,8 +341,6 @@ sub _check_method {
    my ($self, $ev) = @_;
    my $pkg = ref ($self);
 
-   no strict 'refs';
-
    my $add = 0;
    my $repl = 0;
    my $meth;
@@ -445,6 +441,8 @@ sub event {
    # Legacy code end
    ######################
 
+   return unless @cbs;
+
    local $self->{__oe_cbs} = [\@cbs, \@arg, $ev];
    eval {
       $cbs[0]->[2]->($self, @arg), shift @cbs while @cbs;
@@ -461,7 +459,7 @@ sub event {
       }
    }
 
-   @cbs > 0
+   1 # handlers ran
 }
 
 =item my $bool = $obj->handles ($eventname)
@@ -621,8 +619,6 @@ B<NOTE>: For an example about how to use this see the test case C<t/15_methods_s
 sub hand_event_methods_down {
    my ($pkg, @evs) = @_;
 
-   no strict 'refs';
-
    for my $ev (@evs) {
       for my $meth (@{${"$pkg\::__OE_INHERITED_METHODS"}{$ev} || []}) {
          push @{${"$pkg\::__OE_HANDED_METHODS"}{$ev}}, $meth;
@@ -649,7 +645,6 @@ B<NOTE>: For an example about how to use this see the test case C<t/15_methods_s
 sub hand_event_methods_down_from {
    my ($pkg, @pkgs) = @_;
 
-   no strict 'refs';
    $pkg->hand_event_methods_down (keys %{"$pkg\::__OE_INHERITED_METHODS"});
 }
 
@@ -666,8 +661,6 @@ B<NOTE>: For an example about how to use this see the test case C<t/15_methods_s
 
 sub inherit_event_methods_from {
    my ($pkg, @suppkgs) = @_;
-
-   no strict 'refs';
 
    for my $suppkg (@suppkgs) {
       for my $ev (keys %{"$suppkg\::__OE_HANDED_METHODS"}) {

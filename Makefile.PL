@@ -11,8 +11,9 @@ WriteMakefile(
     PL_FILES            => {},
     test                => { TESTS => "t/*.t t/methds/*.t" },
     PREREQ_PM => {
-        'Test::More'   => 0,
-        'AnyEvent'     => 3.5,
+        'Test::More'    => 0,
+        'AnyEvent'      => 3.5,
+        'common::sense' => 0,
     },
     dist                => {
        COMPRESS => 'gzip -9f',
