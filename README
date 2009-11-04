@@ -2,7 +2,7 @@ NAME
     Object::Event - A class that provides an event callback interface
 
 VERSION
-    Version 1.101
+    Version 1.2
 
 SYNOPSIS
        package foo;
@@ -25,7 +25,7 @@ SYNOPSIS
 
 DESCRIPTION
     This module was mainly written for AnyEvent::XMPP, AnyEvent::IRC,
-    AnyEvent::HTTPD and BS to provide a consistent API for registering and
+    AnyEvent::HTTPD and BK to provide a consistent API for registering and
     emitting events. Even though I originally wrote it for those modules I
     released it separately in case anyone may find this module useful.
 
@@ -39,9 +39,8 @@ DESCRIPTION
     the event name and some arguments.
 
     There is even a syntactic sugar which allows to call methods on the
-    instances of a from Object::Event-derived class, to invoke events. See
-    "enable_methods" below. For this feature please also consult the test
-    cases in the distribution for examples.
+    instances of Object::Event-derived classes, to invoke events. For this
+    feature see the "EVENT METHODS" section of this document.
 
 PERFORMANCE
     In the first version as presented here no special performance
@@ -71,17 +70,10 @@ METHODS
         This is the constructor for Object::Event, it will create a blessed
         hash reference initialized with %args.
 
-        There are these special keys for %args:
-
-        enable_methods => $bool
-            If $bool is a true value this object will overwrite the methods
-            in it's package with event emitting methods, and add the
-            method's code as priority 0 event callback. The replacement will
-            happen whenever an event callback is registered with "reg_cb".
-
     $obj->init_object_events ()
         This method should only be called if you are not able to call the
-        "new" constructor of this class.
+        "new" constructor of this class. Then you need to call this method
+        to initialize the event system.
 
     $obj->set_exception_cb ($cb->($exception, $eventname))
         This method installs a callback that will be called when some other
@@ -94,9 +86,12 @@ METHODS
         $eventname1. You can also pass multiple of these eventname =>
         callback pairs.
 
-        The return value will be an ID that represents the set of callbacks
-        you have installed. Call "unreg_cb" with that ID to remove those
-        callbacks again.
+        The return value $guard will be a guard that represents the set of
+        callbacks you have installed. You can either just "forget" the
+        contents of $guard to unregister the callbacks or call "unreg_cb"
+        with that ID to remove those callbacks again. If "reg_cb" is called
+        in a void context no guard is returned and you have no chance to
+        unregister the registered callbacks.
 
         The first argument for callbacks registered with the "reg_cb"
         function will always be the master object $obj. If you want to have
@@ -140,12 +135,12 @@ METHODS
     $obj->unreg_cb ($cb)
         Removes the callback $cb from the set of registered callbacks.
 
-    $obj->event ($eventname, @args)
+    my $handled = $obj->event ($eventname, @args)
         Emits the event $eventname and passes the arguments @args to the
-        callbacks. The return value is a true value in case some handler was
-        found and run. It returns false if no handler was found (see also
-        the "handles" method below). Basically: It returns the same value as
-        the "handles" method.
+        callbacks. The return value $handled is a true value in case some
+        handler was found and run. It returns false if no handler was found
+        (see also the "handles" method below). Basically: It returns the
+        same value as the "handles" method.
 
         Please note that an event can be stopped and reinvoked while it is
         being handled.
@@ -175,9 +170,8 @@ METHODS
            $obj->event ('event_test'); # prints "Test2"
 
     my $bool = $obj->handles ($eventname)
-        This method returns true if any event handler (either registered via
-        "reg_cb" or by a method definition if "enable_methods" is enabled)
-        has been setup for the event $eventname.
+        This method returns true if any event handler has been setup for the
+        event $eventname.
 
         It returns false if that is not the case.
 
@@ -207,48 +201,124 @@ METHODS
         This method returns a string dump of all registered event callbacks.
         This method is only for debugging purposes.
 
-    __PACKAGE__->hand_event_methods_down ($eventname, ...);
-        NOTE: This is only of interest to you if you enabled
-        "enable_methods".
+EVENT METHODS
+    You can define static methods in a package that act as event handler.
+    This is done by using Perl's attributes functionality. To make a method
+    act as event handler you need to add the "event_cb" attribute to it.
 
-        If you want to build up a class hierarchy of Object::Event classes
-        which pass down the defined event methods for events, you need to
-        call this package method. It will pack up all given $eventnames for
-        subclasses, which can 'inherit' these with the
-        "inherit_event_methods_from" package method (see below).
+    NOTE: Please note that for this to work the methods need to be defined
+    at compile time. This means that you are not able to add event handles
+    using "AUTOLOAD"!
 
-        Because the event methods of a package are global with regard to the
-        object instances they need to be added to, you need to register them
-        for the subclasses.
+    NOTE: Perl's attributes have a very basic syntax, you have to take care
+    to not insert any whitespace, the attribute must be a single string that
+    contains no whitespace. That means: "event_cb (1)" is not the same as
+    event_cb(1)!
 
-        NOTE: If you want to hand down event methods from super-classes make
-        sure you call "inherit_event_methods_from" BEFORE
-        "hand_event_methods_down"!
+    Here is an example:
 
-        NOTE: For an example about how to use this see the test case
-        "t/15_methods_subc.t".
+       package foo;
+       use base qw/Object::Event/;
 
-    __PACKAGE__->hand_event_methods_down_from ($package, ...);
-        NOTE: This is only of interest to you if you enabled
-        "enable_methods".
+       sub test : event_cb { print "test event handler!\n" }
 
-        This is a sugar method for "hand_event_methods_down", which will
-        hand down all event methods of the packages in the argument list,
-        along with the in the current package overridden event method.
+       package main;
+       my $o = foo->new;
+       $o->test ();        # prints 'test event handler!'
+       $o->event ('test'); # also prints 'test event handler!'!
 
-        NOTE: For an example about how to use this see the test case
-        "t/15_methods_subc.t".
+    In case you want to set a priority use this syntax:
 
-    __PACKAGE__->inherit_event_methods_from ('SUPER_PKG1', 'OTHER_SUPER',
-    ...)
-        NOTE: This is only of interest to you if you enabled
-        "enable_methods".
+       sub test : event_cb(-1000) { ... }
 
-        Call this package method if you want to inherit event methods from
-        super packages, which you have to give as argument list.
+    Or:
 
-        NOTE: For an example about how to use this see the test case
-        "t/15_methods_subc.t".
+       sub test : event_cb(after) { ... }
+
+    You may want to have a look at the tests of the Object::Event
+    distribution for more examples.
+
+  ALIASES
+    If you want to define multiple event handlers as package method you can
+    use the "event_cb" attribute with an additional argument:
+
+       package foo;
+       use base qw/Object::Event/;
+
+       sub test : event_cb { # default prio is always 0
+          print "middle\n";
+       }
+
+       sub test_last : event_cb(-1,test) {
+          print "after\n";
+       }
+
+       sub test_first : event_cb(1,test) {
+          print "before\n";
+       }
+
+       package main;
+       my $o = foo->new;
+       $o->test ();        # prints "after\n" "middle\n" "before\n"
+       $o->event ('test'); # prints the same
+       $o->test_first ();  # also prints the same
+
+    NOTE: Please note that if you don't provide any order the methods are
+    sorted *alphabetically*:
+
+       package foo;
+       use base qw/Object::Event/;
+
+       sub test : event_cb { # default prio is always 0
+          print "middle\n";
+       }
+
+       sub x : event_cb(, test) { # please note the empty element before the ','! 
+          print "after\n";
+       }
+
+       sub a : event_cb(, test) {
+          print "before\n";
+       }
+
+       package main;
+       my $o = foo->new;
+       $o->test ();        # prints "after\n" "middle\n" "before\n"
+       $o->event ('test'); # prints the same
+       $o->x ();           # also prints the same
+
+  ALIAS ORDERING
+    The ordering of how the methods event handlers are called if they are
+    all defined for the same event is strictly defined:
+
+    1.  Ordering of the methods for the same event in the inheritance
+        hierarchy is always dominated by the priority of the event callback.
+
+    2.  Then if there are multiple methods with the same priority the place
+        in the inheritance hierarchy defines in which order the methods are
+        executed. The higher up in the hierarchy the class is, the earlier
+        it will be called.
+
+    3.  Inside a class the name of the method for the event decides which
+        event is executed first. (All if the priorities are the same)
+
+DEBUGGING
+    There exists a package global variable called $DEBUG that control
+    debugging capabilities.
+
+    Set it to 1 to produce a slightly extended "events_as_string_dump"
+    output.
+
+    Set it to 2 and all events will be dumped in a tree of event
+    invocations.
+
+    You can set the variable either in your main program:
+
+       $Object::Event::DEBUG = 2;
+
+    Or use the environment variable "PERL_OBJECT_EVENT_DEBUG":
+
+       export PERL_OBJECT_EVENT_DEBUG=2
 
 AUTHOR
     Robin Redeker, "<elmex at ta-sa.org>", JID: "<elmex at jabber.org>"

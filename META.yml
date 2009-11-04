@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Object-Event
-version:            1.101
+version:            1.2
 abstract:           A class that provides an event callback interface
 author:
     - Robin Redeker <elmex@x-paste.de>

@@ -1,5 +1,13 @@
 Revision history for Object-Event:
 
+1.2     Thu Nov  5 00:01:47 CET 2009
+        - removed hand_event_methods_down and inherit_event_methods_from
+          in favour of the event_cb attribute, which made inheriting event
+          method much easier.
+        - added event_cb alias attribute parameter to be able to specify
+          multiple package method event handlers for an object.
+        - added some debugging functionality.
+
 1.101   Fri Sep  4 14:24:58 CEST 2009
         - fixed stupid bug in event method, returning always false
           (added test for that now).

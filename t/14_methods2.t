@@ -7,7 +7,7 @@ use common::sense;
 
 use base qw/Object::Event/;
 
-sub test {
+sub test : event_cb {
    my ($self, $a, $b) = @_;
    $self->{res} = $a + $b;
 }
@@ -17,7 +17,7 @@ sub reset { (shift)->{res} = 0 }
 package main;
 use common::sense;
 
-my $f = foo->new (enable_methods => 1);
+my $f = foo->new;
 
 $f->test (10, 20);
 

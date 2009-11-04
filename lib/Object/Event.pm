@@ -3,7 +3,9 @@ use common::sense;
 use Carp qw/croak/;
 use AnyEvent::Util qw/guard/;
 
-our $ENABLE_METHODS_DEFAULT = 0;
+use sort 'stable';
+
+our $DEBUG = $ENV{PERL_OBJECT_EVENT_DEBUG};
 
 =head1 NAME
 
@@ -11,11 +13,11 @@ Object::Event - A class that provides an event callback interface
 
 =head1 VERSION
 
-Version 1.101
+Version 1.2
 
 =cut
 
-our $VERSION = '1.101';
+our $VERSION = '1.2';
 
 =head1 SYNOPSIS
 
@@ -41,7 +43,7 @@ our $VERSION = '1.101';
 =head1 DESCRIPTION
 
 This module was mainly written for L<AnyEvent::XMPP>, L<AnyEvent::IRC>,
-L<AnyEvent::HTTPD> and L<BS> to provide a consistent API for registering and
+L<AnyEvent::HTTPD> and L<BK> to provide a consistent API for registering and
 emitting events.  Even though I originally wrote it for those modules I released
 it separately in case anyone may find this module useful.
 
@@ -54,10 +56,9 @@ You will be able to register callbacks for events, identified by their names (a
 string) and call them later by invoking the C<event> method with the event name
 and some arguments. 
 
-There is even a syntactic sugar which allows to call methods on the
-instances of a from L<Object::Event>-derived class, to invoke events.
-See C<enable_methods> below. For this feature please also consult the
-test cases in the distribution for examples.
+There is even a syntactic sugar which allows to call methods on the instances
+of L<Object::Event>-derived classes, to invoke events.  For this feature see
+the L<EVENT METHODS> section of this document.
 
 =head1 PERFORMANCE
 
@@ -117,19 +118,6 @@ sub register_priority_alias {
 This is the constructor for L<Object::Event>,
 it will create a blessed hash reference initialized with C<%args>.
 
-There are these special keys for C<%args>:
-
-=over 4
-
-=item enable_methods => $bool
-
-If C<$bool> is a true value this object will overwrite the methods
-in it's package with event emitting methods, and add the method's code
-as priority 0 event callback. The replacement will happen whenever
-an event callback is registered with C<reg_cb>.
-
-=back
-
 =cut
 
 sub new {
@@ -146,23 +134,23 @@ sub new {
 =item $obj->init_object_events ()
 
 This method should only be called if you are not able to call the C<new>
-constructor of this class.
+constructor of this class. Then you need to call this method to initialize
+the event system.
 
 =cut
 
 sub init_object_events {
    my ($self) = @_;
 
-   unless (defined $self->{enable_methods}) {
-      $self->{enable_methods} = $ENABLE_METHODS_DEFAULT;
-   }
+   my $pkg = ref $self;
 
-   if ($self->{enable_methods}) {
-      my $class = ref $self;
-      for my $ev (keys %{"$class\::__OE_INHERITED_METHODS"}) {
-         $self->_check_method ($ev)
-      }
-   }
+   _init_methods ($pkg) unless *{"$pkg\::__OE_METHODS"}{HASH};
+
+   $self->{__oe_events} = {
+      map {
+         ($_ => [@{${"$pkg\::__OE_METHODS"}{$_}}])
+      } keys %{"$pkg\::__OE_METHODS"}
+   };
 }
 
 =item $obj->set_exception_cb ($cb->($exception, $eventname))
@@ -186,8 +174,11 @@ This method registers a callback C<$cb1> for the event with the
 name C<$eventname1>. You can also pass multiple of these eventname => callback
 pairs.
 
-The return value will be an ID that represents the set of callbacks you have installed.
-Call C<unreg_cb> with that ID to remove those callbacks again.
+The return value C<$guard> will be a guard that represents the set of callbacks
+you have installed. You can either just "forget" the contents of C<$guard> to
+unregister the callbacks or call C<unreg_cb> with that ID to remove those
+callbacks again. If C<reg_cb> is called in a void context no guard is returned
+and you have no chance to unregister the registered callbacks.
 
 The first argument for callbacks registered with the C<reg_cb> function will
 always be the master object C<$obj>. If you want to have the event object
@@ -229,9 +220,45 @@ instead of the event name:
 
 =cut
 
+our @DEBUG_STACK;
+
+sub _debug_cb {
+   my ($callback) = @_;
+
+   sub {
+      my @a = @_;
+      my $dbcb = $_[0]->{__oe_cbs}->[0]->[0];
+      my $nam  = $_[0]->{__oe_cbs}->[2];
+      push @DEBUG_STACK, $dbcb;
+
+      my $pad = "  " x scalar @DEBUG_STACK;
+
+      printf "%s-> %s\n", $pad, $dbcb->[3];
+
+      eval { $callback->(@a) };
+      my $e = $@;
+
+      printf "%s<- %s\n", $pad, $dbcb->[3];
+
+      pop @DEBUG_STACK;
+
+      die $e if $e;
+      ()
+   };
+
+}
+sub _print_event_debug {
+   my ($ev) = @_;
+   my $pad = "  " x scalar @DEBUG_STACK;
+   my ($pkg, $file, $line) = caller (1);
+   for my $path (@INC) {
+      last if $file =~ s/^\Q$path\E\/?//;
+   }
+   printf "%s!! %s @ %s:%d (%s::)\n", $pad, $ev, $file, $line, $pkg
+}
 
 sub _register_event_struct {
-   my ($self, $event, $prio, $callback) = @_;
+   my ($self, $event, $prio, $callback, $debug) = @_;
 
    my $reg = ($self->{__oe_events} ||= {});
    my $idx = 0;
@@ -239,15 +266,27 @@ sub _register_event_struct {
    my $evlist = $reg->{$event};
 
    for my $ev (@$evlist) {
-      last if $ev->[1] < $prio;
+      last if $ev->[0] < $prio;
       $idx++;
    }
 
-   splice @$evlist, $idx, 0, [$event, $prio, $callback]
+   my $cb = $callback;
+   $cb = _debug_cb ($callback) if $DEBUG > 1;
+
+   splice @$evlist, $idx, 0, [$prio, "$callback", undef, $debug, $cb];
 }
 
 sub reg_cb {
    my ($self, @args) = @_;
+
+   my $debuginfo = caller;
+   if ($DEBUG > 0) {
+      my ($pkg,$file,$line) = caller;
+      for my $path (@INC) {
+         last if $file =~ s/^\Q$path\E\/?//;
+      }
+      $debuginfo = sprintf "%s:%d (%s::)", $file, $line, $pkg;
+   }
 
    my @cbs;
    while (@args) {
@@ -270,8 +309,7 @@ sub reg_cb {
          $cb   = shift @args;
       }
 
-      $self->_check_method ($ev) if $self->{enable_methods};
-      $self->_register_event_struct ($ev, $prio, $cb);
+      $self->_register_event_struct ($ev, $prio, $cb, $debuginfo);
       push @cbs, $cb;
    }
 
@@ -298,16 +336,17 @@ sub unreg_cb {
    my $evs = $self->{__oe_events};
 
    for my $reg (values %$evs) {
-      @$reg = grep { $_->[2] ne $cb } @$reg;
+      @$reg = grep { $_->[1] ne $cb } @$reg;
    }
 }
 
-=item $obj->event ($eventname, @args)
+=item my $handled = $obj->event ($eventname, @args)
 
 Emits the event C<$eventname> and passes the arguments C<@args> to the
-callbacks. The return value is a true value in case some handler was found
-and run. It returns false if no handler was found (see also the C<handles>
-method below). Basically: It returns the same value as the C<handles> method.
+callbacks. The return value C<$handled> is a true value in case some handler
+was found and run. It returns false if no handler was found (see also the
+C<handles> method below). Basically: It returns the same value as the
+C<handles> method.
 
 Please note that an event can be stopped and reinvoked while it is being
 handled.
@@ -337,63 +376,8 @@ when the event is emitted. Example:
 
 =cut
 
-sub _check_method {
-   my ($self, $ev) = @_;
-   my $pkg = ref ($self);
-
-   my $add = 0;
-   my $repl = 0;
-   my $meth;
-
-   if ($meth = ${"$pkg\::__OE_METHODS"}{$ev}) {
-      unless ($self->{__oe_added_methods}->{$ev}) {
-         $add = $self->{__oe_added_methods}->{$ev} = 1;
-      }
-
-   } else {
-      $meth = ${"$pkg\::__OE_METHODS"}{$ev} = *{"$pkg\::$ev"}{CODE} || 1;
-      $add = $self->{__oe_added_methods}->{$ev} = 1;
-      $repl = 1;
-   }
-
-   if ($add) {
-      if (my $super_meth = ${"$pkg\::__OE_INHERITED_METHODS"}{$ev}) {
-         $self->reg_cb ($ev, $_) for @$super_meth;
-      }
-
-      $self->reg_cb ($ev, $meth) if ref $meth;
-   }
-
-   if ($repl) {
-      *{"$pkg\::$ev"} = sub {
-         my ($self, @arg) = @_;
-         my @cbs = @{$self->{__oe_events}->{$ev}
-                     || ${"$pkg\::__OE_INHERITED_METHODS"}{$ev}};
-         local $self->{__oe_cbs} = [\@cbs, \@arg, $ev];
-         eval {
-            $cbs[0]->[2]->($self, @arg), shift @cbs while @cbs
-         };
-         if ($@) {
-            if (not ($self->{__oe_exception_rec}) && $self->{__oe_exception_cb}) {
-               local $self->{__oe_exception_rec} = [$ev, $self, @arg];
-               $self->{__oe_exception_cb}->($@, $ev);
-
-            } elsif ($self->{__oe_exception_rec}) {
-               warn "recursion through exception callback (@{$self->{__oe_exception_rec}}) => ($ev, $self, @arg): $@\n";
-            } else {
-               warn "unhandled callback exception on event ($ev, $self, @arg): $@\n";
-            }
-         }
-
-         @cbs > 0
-      };
-   }
-}
-
 sub event {
    my ($self, $ev, @arg) = @_;
-
-   $self->_check_method ($ev) if $self->{enable_methods};
 
    my @cbs;
 
@@ -429,7 +413,8 @@ sub event {
                if ($self->{__oe_exception_cb}) {
                   $self->{__oe_exception_cb}->($@, $ev);
                } else {
-                  warn "unhandled callback exception on forward event ($ev, $self, $f->[0], @arg): $@\n";
+                  warn "unhandled callback exception on forward event "
+                       . "($ev, $self, $f->[0], @arg): $@\n";
                }
             } elsif ($f->[0]->{__oe_forward_stop}) {
                $self->stop_event;
@@ -441,19 +426,25 @@ sub event {
    # Legacy code end
    ######################
 
+   _print_event_debug ($ev) if $DEBUG > 1;
+
    return unless @cbs;
 
    local $self->{__oe_cbs} = [\@cbs, \@arg, $ev];
    eval {
-      $cbs[0]->[2]->($self, @arg), shift @cbs while @cbs;
+      $cbs[0]->[4]->($self, @arg), shift @cbs while @cbs;
+      ()
    };
    if ($@) {
-      if (not ($self->{__oe_exception_rec}) && $self->{__oe_exception_cb}) {
+      if (not ($self->{__oe_exception_rec})
+          && $self->{__oe_exception_cb}) {
          local $self->{__oe_exception_rec} = [$ev, $self, @arg];
          $self->{__oe_exception_cb}->($@, $ev);
 
       } elsif ($self->{__oe_exception_rec}) {
-         warn "recursion through exception callback (@{$self->{__oe_exception_rec}}) => ($ev, $self, @arg): $@\n";
+         warn "recursion through exception callback "
+              . "(@{$self->{__oe_exception_rec}}) => "
+              . "($ev, $self, @arg): $@\n";
       } else {
          warn "unhandled callback exception on event ($ev, $self, @arg): $@\n";
       }
@@ -464,8 +455,7 @@ sub event {
 
 =item my $bool = $obj->handles ($eventname)
 
-This method returns true if any event handler (either registered via C<reg_cb>
-or by a method definition if C<enable_methods> is enabled) has been setup for
+This method returns true if any event handler has been setup for
 the event C<$eventname>.
 
 It returns false if that is not the case.
@@ -474,8 +464,6 @@ It returns false if that is not the case.
 
 sub handles {
    my ($self, $ev) = @_;
-
-   $self->_check_method ($ev) if $self->{enable_methods};
 
    exists $self->{__oe_events}->{$ev}
       && @{$self->{__oe_events}->{$ev}} > 0
@@ -502,7 +490,7 @@ Unregisters the currently executed callback.
 sub unreg_me {
    my ($self) = @_;
    return unless $self->{__oe_cbs} && @{$self->{__oe_cbs}->[0]};
-   $self->unreg_cb ($self->{__oe_cbs}->[0]->[0]->[2])
+   $self->unreg_cb ($self->{__oe_cbs}->[0]->[0]->[1])
 }
 
 =item $continue_cb = $obj->stop_event
@@ -590,87 +578,291 @@ sub events_as_string_dump {
    my $str = '';
    for my $ev (keys %{$self->{__oe_events}}) {
       my $evr = $self->{__oe_events}->{$ev};
-      $str .= "$ev: " . join (',', map { "(@$_)" } @$evr) . "\n";
+      $str .=
+         "$ev:\n"
+         . join ('', map { sprintf "   %5d %s\n", $_->[0], $_->[3] } @$evr)
+         . "\n";
    }
    $str
 }
 
-=item __PACKAGE__->hand_event_methods_down ($eventname, ...);
+=back
 
-B<NOTE:> This is only of interest to you if you enabled C<enable_methods>.
+=head1 EVENT METHODS
 
-If you want to build up a class hierarchy of L<Object::Event>
-classes which pass down the defined event methods for events, you need
-to call this package method. It will pack up all given C<$eventname>s
-for subclasses, which can 'inherit' these with the C<inherit_event_methods_from>
-package method (see below).
+You can define static methods in a package that act as event handler.
+This is done by using Perl's L<attributes> functionality. To make
+a method act as event handler you need to add the C<event_cb> attribute
+to it.
 
-Because the event methods of a package are global with regard to the
-object instances they need to be added to, you need to register them
-for the subclasses.
+B<NOTE:> Please note that for this to work the methods need to be defined at
+compile time. This means that you are not able to add event handles using
+C<AUTOLOAD>!
 
-B<NOTE>: If you want to hand down event methods from super-classes make sure
-you call C<inherit_event_methods_from> B<BEFORE> C<hand_event_methods_down>!
+B<NOTE:> Perl's attributes have a very basic syntax, you have to take
+care to not insert any whitespace, the attribute must be a single
+string that contains no whitespace. That means: C<event_cb (1)> is not the
+same as C<event_cb(1)>!
 
-B<NOTE>: For an example about how to use this see the test case C<t/15_methods_subc.t>.
+Here is an example:
 
-=cut
+   package foo;
+   use base qw/Object::Event/;
 
-sub hand_event_methods_down {
-   my ($pkg, @evs) = @_;
+   sub test : event_cb { print "test event handler!\n" }
 
-   for my $ev (@evs) {
-      for my $meth (@{${"$pkg\::__OE_INHERITED_METHODS"}{$ev} || []}) {
-         push @{${"$pkg\::__OE_HANDED_METHODS"}{$ev}}, $meth;
-      }
+   package main;
+   my $o = foo->new;
+   $o->test ();        # prints 'test event handler!'
+   $o->event ('test'); # also prints 'test event handler!'!
 
-      my $meth = ${"$pkg\::__OE_METHODS"}{$ev};
-      $meth = *{"$pkg\::$ev"}{CODE} unless $meth;
-      push @{${"$pkg\::__OE_HANDED_METHODS"}{$ev}}, $meth if ref $meth;
+In case you want to set a priority use this syntax:
+
+   sub test : event_cb(-1000) { ... }
+
+Or:
+
+   sub test : event_cb(after) { ... }
+
+You may want to have a look at the tests of the L<Object::Event>
+distribution for more examples.
+
+=head2 ALIASES
+
+If you want to define multiple event handlers as package method
+you can use the C<event_cb> attribute with an additional argument:
+
+   package foo;
+   use base qw/Object::Event/;
+
+   sub test : event_cb { # default prio is always 0
+      print "middle\n";
    }
-}
 
-=item __PACKAGE__->hand_event_methods_down_from ($package, ...);
-
-B<NOTE:> This is only of interest to you if you enabled C<enable_methods>.
-
-This is a sugar method for C<hand_event_methods_down>, which will
-hand down all event methods of the packages in the argument list,
-along with the in the current package overridden event method.
-
-B<NOTE>: For an example about how to use this see the test case C<t/15_methods_subc.t>.
-
-=cut
-
-sub hand_event_methods_down_from {
-   my ($pkg, @pkgs) = @_;
-
-   $pkg->hand_event_methods_down (keys %{"$pkg\::__OE_INHERITED_METHODS"});
-}
-
-=item __PACKAGE__->inherit_event_methods_from ('SUPER_PKG1', 'OTHER_SUPER', ...)
-
-B<NOTE:> This is only of interest to you if you enabled C<enable_methods>.
-
-Call this package method if you want to inherit event methods from super
-packages, which you have to give as argument list.
-
-B<NOTE>: For an example about how to use this see the test case C<t/15_methods_subc.t>.
-
-=cut
-
-sub inherit_event_methods_from {
-   my ($pkg, @suppkgs) = @_;
-
-   for my $suppkg (@suppkgs) {
-      for my $ev (keys %{"$suppkg\::__OE_HANDED_METHODS"}) {
-         push @{${"$pkg\::__OE_INHERITED_METHODS"}{$ev}},
-            @{${"$suppkg\::__OE_HANDED_METHODS"}{$ev}};
-      }
+   sub test_last : event_cb(-1,test) {
+      print "after\n";
    }
-}
+
+   sub test_first : event_cb(1,test) {
+      print "before\n";
+   }
+
+   package main;
+   my $o = foo->new;
+   $o->test ();        # prints "after\n" "middle\n" "before\n"
+   $o->event ('test'); # prints the same
+   $o->test_first ();  # also prints the same
+
+B<NOTE:> Please note that if you don't provide any order the methods
+are sorted I<alphabetically>:
+
+   package foo;
+   use base qw/Object::Event/;
+
+   sub test : event_cb { # default prio is always 0
+      print "middle\n";
+   }
+
+   sub x : event_cb(, test) { # please note the empty element before the ','! 
+      print "after\n";
+   }
+
+   sub a : event_cb(, test) {
+      print "before\n";
+   }
+
+   package main;
+   my $o = foo->new;
+   $o->test ();        # prints "after\n" "middle\n" "before\n"
+   $o->event ('test'); # prints the same
+   $o->x ();           # also prints the same
+
+=head2 ALIAS ORDERING
+
+The ordering of how the methods event handlers are called if they
+are all defined for the same event is strictly defined:
+
+=over 4
+
+=item 1.
+
+Ordering of the methods for the same event in the inheritance hierarchy
+is always dominated by the priority of the event callback.
+
+=item 2.
+
+Then if there are multiple methods with the same priority the place in the
+inheritance hierarchy defines in which order the methods are executed. The
+higher up in the hierarchy the class is, the earlier it will be called.
+
+=item 3.
+
+Inside a class the name of the method for the event decides which event is
+executed first. (All if the priorities are the same)
 
 =back
+
+=cut
+
+our %ATTRIBUTES;
+
+sub FETCH_CODE_ATTRIBUTES {
+   my ($pkg, $ref) = @_;
+   return () unless exists $ATTRIBUTES{$pkg};
+   return () unless exists $ATTRIBUTES{$pkg}->{"$ref"};
+
+   my $a = $ATTRIBUTES{$pkg}->{"$ref"};
+
+   'event_cb' . (
+       ($a->[0] ne '' || defined ($b->[1]))
+          ? "($a->[0],$b->[1])"
+          : ''
+    )
+}
+
+sub MODIFY_CODE_ATTRIBUTES {
+   my ($pkg, $ref, @attrs) = @_;
+   grep {
+     my $unhandled = 1;
+
+     if ($_ =~ /^event_cb (?:
+                   \(
+                       \s* ([^\),]*) \s*
+                       (?: , \s* ([^\)]+) \s* )?
+                   \)
+               )?$/x) {
+        $ATTRIBUTES{$pkg}->{"$ref"} = [$1, $2];
+        $unhandled = 0;
+     }
+
+     $unhandled
+   } @attrs;
+}
+
+sub _init_methods {
+   my ($pkg) = @_;
+
+   my $sup = \%{"$pkg\::__OE_METHODS"};
+
+   for my $superpkg (@{"$pkg\::ISA"}) {
+       next unless $superpkg->isa ("Object::Event");
+
+       _init_methods ($superpkg)
+          unless *{"$superpkg\::__OE_METHODS"}{HASH};
+
+       for (keys %{"$superpkg\::__OE_METHODS"}) {
+          push @{$sup->{$_}}, @{${"$superpkg\::__OE_METHODS"}{$_} || []};
+       }
+   }
+
+   my %mymethds;
+
+   for my $realmeth (keys %{"$pkg\::"}) {
+
+      my $coderef = *{"$pkg\::$realmeth"}{CODE};
+      next unless exists $ATTRIBUTES{$pkg}->{"$coderef"};
+      my $m = $ATTRIBUTES{$pkg}->{"$coderef"};
+
+      my $meth = $realmeth;
+
+      if (defined $m->[1]) { # assign alias
+         $meth = $m->[1];
+      }
+
+      my $cb = $coderef;
+      $cb = _debug_cb ($coderef) if $DEBUG > 1;
+
+      push @{$mymethds{$meth}}, [
+         (exists $PRIO_MAP{$m->[0]} # set priority
+            ? $PRIO_MAP{$m->[0]}
+            : 0+$m->[0]),
+         "$coderef",
+         $realmeth,
+         $pkg . '::' . $realmeth,
+         $cb
+      ] if defined &{"$pkg\::$meth"};
+
+      #d# warn "REPLACED $pkg $meth => $coderef ($m->[1])\n";
+
+      _replace_method ($pkg, $realmeth, $meth);
+   }
+
+   for my $ev (keys %mymethds) {
+      @{$mymethds{$ev}} =
+         sort { $a->[2] cmp $b->[2] }
+            @{$mymethds{$ev}};
+   }
+
+   push @{$sup->{$_}}, @{$mymethds{$_}}
+      for keys %mymethds;
+
+   for my $ev (keys %$sup) {
+      @{$sup->{$ev}} =
+         sort { $b->[0] <=> $a->[0] }
+            @{$sup->{$ev}};
+   }
+}
+
+sub _replace_method {
+   my ($pkg, $meth, $ev) = @_;
+
+   *{"$pkg\::$meth"} = sub {
+      my ($self, @arg) = @_;
+
+      _print_event_debug ($ev) if $DEBUG > 1;
+
+      # either execute callbacks of the object or
+      # alternatively (if non present) the inherited ones
+      my @cbs = @{
+          $self->{__oe_events}->{$ev}
+          || ${"$pkg\::__OE_METHODS"}{$ev}
+          || []};
+
+      # inline the code of the C<event> method.
+      local $self->{__oe_cbs} = [\@cbs, \@arg, $ev];
+      eval {
+         $cbs[0]->[4]->($self, @arg), shift @cbs while @cbs;
+         ()
+      };
+
+      if ($@) {
+         if (not ($self->{__oe_exception_rec})
+             && $self->{__oe_exception_cb}) {
+
+            local $self->{__oe_exception_rec} = [$ev, $self, @arg];
+            $self->{__oe_exception_cb}->($@, $ev);
+
+         } elsif ($self->{__oe_exception_rec}) {
+            warn "recursion through exception callback "
+                 . "(@{$self->{__oe_exception_rec}}) => "
+                 . "($ev, $self, @arg): $@\n";
+
+         } else {
+            warn "unhandled callback exception on event "
+                 . "($ev, $self, @arg): $@\n";
+         }
+      }
+
+      @cbs > 0
+   };
+}
+
+=head1 DEBUGGING
+
+There exists a package global variable called C<$DEBUG> that control debugging
+capabilities.
+
+Set it to 1 to produce a slightly extended C<events_as_string_dump> output.
+
+Set it to 2 and all events will be dumped in a tree of event invocations.
+
+You can set the variable either in your main program:
+
+   $Object::Event::DEBUG = 2;
+
+Or use the environment variable C<PERL_OBJECT_EVENT_DEBUG>:
+
+   export PERL_OBJECT_EVENT_DEBUG=2
 
 =head1 AUTHOR
 

@@ -12,14 +12,14 @@ sub new {
 }
 
 our $cnt;
-sub test { $cnt++ }
+sub test : event_cb { $cnt++ }
 
 package main;
 use common::sense;
 
 use Benchmark qw/:all/;
 
-my $f = foo->new (enable_methods => 1);
+my $f = foo->new;
 
 for (1..10) {
    $f->reg_cb (test => sub {
@@ -30,7 +30,7 @@ for (1..10) {
 
 my $ev;
 
-timethese (100000, {
+timethese (250000, {
    simple => sub { $f->event ('test') },
    method => sub { $f->test }
 });
