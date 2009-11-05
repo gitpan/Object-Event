@@ -2,7 +2,7 @@ NAME
     Object::Event - A class that provides an event callback interface
 
 VERSION
-    Version 1.2
+    Version 1.21
 
 SYNOPSIS
        package foo;
@@ -94,9 +94,7 @@ METHODS
         unregister the registered callbacks.
 
         The first argument for callbacks registered with the "reg_cb"
-        function will always be the master object $obj. If you want to have
-        the event object $ev (which represents an event which was sent by
-        the "event" method) as first argument use the "reg_event_cb" method.
+        function will always be the master object $obj.
 
         The return value of the callbacks are ignored. If you need to pass
         any information from a handler to the caller of the event you have

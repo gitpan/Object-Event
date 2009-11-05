@@ -13,11 +13,11 @@ Object::Event - A class that provides an event callback interface
 
 =head1 VERSION
 
-Version 1.2
+Version 1.21
 
 =cut
 
-our $VERSION = '1.2';
+our $VERSION = '1.21';
 
 =head1 SYNOPSIS
 
@@ -181,9 +181,7 @@ callbacks again. If C<reg_cb> is called in a void context no guard is returned
 and you have no chance to unregister the registered callbacks.
 
 The first argument for callbacks registered with the C<reg_cb> function will
-always be the master object C<$obj>. If you want to have the event object
-C<$ev> (which represents an event which was sent by the C<event> method) as
-first argument use the C<reg_event_cb> method.
+always be the master object C<$obj>.
 
 The return value of the callbacks are ignored. If you need to pass
 any information from a handler to the caller of the event you have to
@@ -397,12 +395,12 @@ sub event {
       # first search the start of the 0 priorities...
       my $idx = 0;
       for my $ev (@cbs) {
-         last if $ev->[1] <= 0;
+         last if $ev->[0] <= 0;
          $idx++;
       }
 
       # then splice in the stuff
-      splice @cbs, $idx, 0, [$ev, 0, sub {
+      my $cb = sub {
          for my $fw (keys %{$self->{__oe_forwards}}) {
             my $f = $self->{__oe_forwards}->{$fw};
             local $f->[0]->{__oe_forward_stop} = 0;
@@ -420,7 +418,9 @@ sub event {
                $self->stop_event;
             }
          }
-      }]
+      };
+
+      splice @cbs, $idx, 0, [0, "$cb", undef, undef, $cb];
    }
    ######################
    # Legacy code end
