@@ -13,11 +13,11 @@ Object::Event - A class that provides an event callback interface
 
 =head1 VERSION
 
-Version 1.21
+Version 1.22
 
 =cut
 
-our $VERSION = '1.21';
+our $VERSION = '1.22';
 
 =head1 SYNOPSIS
 
@@ -146,6 +146,8 @@ sub init_object_events {
 
    _init_methods ($pkg) unless *{"$pkg\::__OE_METHODS"}{HASH};
 
+   $self->{__oe_cb_gen} = "a"; # generation counter
+
    $self->{__oe_events} = {
       map {
          ($_ => [@{${"$pkg\::__OE_METHODS"}{$_}}])
@@ -256,7 +258,7 @@ sub _print_event_debug {
 }
 
 sub _register_event_struct {
-   my ($self, $event, $prio, $callback, $debug) = @_;
+   my ($self, $event, $prio, $gen, $callback, $debug) = @_;
 
    my $reg = ($self->{__oe_events} ||= {});
    my $idx = 0;
@@ -271,7 +273,7 @@ sub _register_event_struct {
    my $cb = $callback;
    $cb = _debug_cb ($callback) if $DEBUG > 1;
 
-   splice @$evlist, $idx, 0, [$prio, "$callback", undef, $debug, $cb];
+   splice @$evlist, $idx, 0, [$prio, "$callback|$gen", undef, $debug, $cb];
 }
 
 sub reg_cb {
@@ -285,6 +287,8 @@ sub reg_cb {
       }
       $debuginfo = sprintf "%s:%d (%s::)", $file, $line, $pkg;
    }
+
+   my $gen = $self->{__oe_cb_gen}++; # get gen counter
 
    my @cbs;
    while (@args) {
@@ -307,12 +311,12 @@ sub reg_cb {
          $cb   = shift @args;
       }
 
-      $self->_register_event_struct ($ev, $prio, $cb, $debuginfo);
+      $self->_register_event_struct ($ev, $prio, $gen, $cb, $debuginfo);
       push @cbs, $cb;
    }
 
    defined wantarray
-      ? \(my $g = guard { if ($self) { $self->unreg_cb ($_) for @cbs } })
+      ? \(my $g = guard { if ($self) { $self->unreg_cb ($_, $gen) for @cbs } })
       : ()
 }
 
@@ -323,7 +327,7 @@ Removes the callback C<$cb> from the set of registered callbacks.
 =cut
 
 sub unreg_cb {
-   my ($self, $cb) = @_;
+   my ($self, $cb, $gen) = @_;
 
    if (ref ($cb) eq 'REF') {
       # we've got a guard object
@@ -333,8 +337,18 @@ sub unreg_cb {
 
    my $evs = $self->{__oe_events};
 
+   # $gen is neccessary for the times where we use the guard to remove
+   # something, because we only have the callback as ID we need to track the
+   # generation of the registration for these:
+   #
+   # my $cb = sub { ... };
+   # my $g = $o->reg_cb (a => $cb);
+   # $g = $o->reg_cb (a => $cb);
+   my ($key, $key_len) = defined $gen
+                            ? ("$cb|$gen", length "$cb|$gen")
+                            : ("$cb", length "$cb");
    for my $reg (values %$evs) {
-      @$reg = grep { $_->[1] ne $cb } @$reg;
+      @$reg = grep { (substr $_->[1], 0, $key_len) ne $key } @$reg;
    }
 }
 
@@ -742,26 +756,29 @@ sub MODIFY_CODE_ATTRIBUTES {
 sub _init_methods {
    my ($pkg) = @_;
 
-   my $sup = \%{"$pkg\::__OE_METHODS"};
+   my $pkg_meth = \%{"$pkg\::__OE_METHODS"};
 
-   for my $superpkg (@{"$pkg\::ISA"}) {
-       next unless $superpkg->isa ("Object::Event");
+   for my $superpkg (@{"$pkg\::ISA"}) { # go recursively into super classes
+       next unless $superpkg->isa ("Object::Event"); # skip non O::E
 
+       # go into the class if we have not already been there
        _init_methods ($superpkg)
           unless *{"$superpkg\::__OE_METHODS"}{HASH};
 
+       # add the methods of the $superpkg to our own
        for (keys %{"$superpkg\::__OE_METHODS"}) {
-          push @{$sup->{$_}}, @{${"$superpkg\::__OE_METHODS"}{$_} || []};
+          push @{$pkg_meth->{$_}}, @{${"$superpkg\::__OE_METHODS"}{$_} || []};
        }
    }
 
    my %mymethds;
 
+   # now check each package symbol
    for my $realmeth (keys %{"$pkg\::"}) {
 
       my $coderef = *{"$pkg\::$realmeth"}{CODE};
-      next unless exists $ATTRIBUTES{$pkg}->{"$coderef"};
-      my $m = $ATTRIBUTES{$pkg}->{"$coderef"};
+      next unless exists $ATTRIBUTES{$pkg}->{"$coderef"}; # skip unattributed methods
+      my $m = $ATTRIBUTES{$pkg}->{"$coderef"}; # $m = [$prio, $event_name]
 
       my $meth = $realmeth;
 
@@ -776,30 +793,37 @@ sub _init_methods {
          (exists $PRIO_MAP{$m->[0]} # set priority
             ? $PRIO_MAP{$m->[0]}
             : 0+$m->[0]),
-         "$coderef",
-         $realmeth,
-         $pkg . '::' . $realmeth,
-         $cb
-      ] if defined &{"$pkg\::$meth"};
+         "$coderef", # callback id
+         $realmeth,  # original method name
+         $pkg . '::' . $realmeth, # debug info
+         $cb         # the callback
 
-      #d# warn "REPLACED $pkg $meth => $coderef ($m->[1])\n";
+         # only replace if defined, otherwise declarations without definitions will
+         # replace the $cb/$coderef with something that calls itself recursively.
+
+      ] if defined &{"$pkg\::$realmeth"};
+
+      #d# warn "REPLACED $pkg $meth (by $realmeth) => $coderef ($m->[1])\n";
 
       _replace_method ($pkg, $realmeth, $meth);
    }
 
+   # sort my methods by name
    for my $ev (keys %mymethds) {
       @{$mymethds{$ev}} =
          sort { $a->[2] cmp $b->[2] }
             @{$mymethds{$ev}};
    }
 
-   push @{$sup->{$_}}, @{$mymethds{$_}}
+   # add my methods to the super class method list
+   push @{$pkg_meth->{$_}}, @{$mymethds{$_}}
       for keys %mymethds;
 
-   for my $ev (keys %$sup) {
-      @{$sup->{$ev}} =
+   # sort by priority over all, stable to not confuse names
+   for my $ev (keys %$pkg_meth) {
+      @{$pkg_meth->{$ev}} =
          sort { $b->[0] <=> $a->[0] }
-            @{$sup->{$ev}};
+            @{$pkg_meth->{$ev}};
    }
 }
 

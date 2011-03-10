@@ -1,6 +1,6 @@
 #!perl
 
-use Test::More tests => 4;
+use Test::More tests => 5;
 
 package foo;
 use common::sense;
@@ -31,3 +31,11 @@ $f->event (test => 20);
 is ($called, 10, "second test still called once");
 
 ok (!$f->handles ('test'), "no handler anymore");
+
+$called = 0;
+my $sub = sub { $called++ };
+$id = $f->reg_cb (t => $sub);
+$f->event ('t');
+$id = $f->reg_cb (t => $sub);
+$f->event ('t');
+is ($called, 2, "guard removal on assignment correct");

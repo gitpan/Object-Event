@@ -1,5 +1,9 @@
 Revision history for Object-Event:
 
+1.22    Thu Mar 10 17:17:58 CET 2011
+        - fixed a bug where event methods were not registered correctly.
+        - found a bug with using the guard to track cb registrations.
+
 1.21    Thu Nov  5 19:37:58 CET 2009
         - fixed a bug in the legacy forward code to support the old
           AnyEvent::XMPP API.

@@ -1,6 +1,6 @@
 #!perl
 
-use Test::More tests => 11;
+use Test::More tests => 12;
 
 package foo;
 use common::sense;
@@ -19,6 +19,8 @@ sub noafter : event_cb { $_[0]->{y} = 10 }
 sub pt : event_cb { push @{$_[0]->{a}}, 20 }
 
 sub foobar : event_cb;
+
+sub foozzz : event_cb(, foobar);
 
 package foo2;
 use base qw/foo/;
@@ -52,6 +54,10 @@ $f->foobar;
 $f2->foobar;
 is ($f->{b}, 10, 'first object got method with event callback');
 is ($f2->{b}, undef, 'second object doesn\'t have method with event callback');
+
+$f->{b} = 0;
+$f->foozzz;
+is ($f->{b}, 10, 'first object got method with event callback with alias method');
 
 ok ($f->event ('test'), 'event returns true for methods');
 

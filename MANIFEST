@@ -20,9 +20,11 @@ t/15_methods_subc.t
 t/16_event.t
 t/17_methods_alias.t
 t/18_method_inherit.t
+t/18_method_inherit_2.t
 t/19_method_exept.t
 t/20_forward_legacy.t
 samples/simple_example
 samples/benchmark
 samples/mass_example
 META.yml                                 Module meta-data (added by MakeMaker)
+META.json                                Module meta-data (added by MakeMaker)
