@@ -1,5 +1,8 @@
 Revision history for Object-Event:
 
+1.23    Thu Aug  4 10:52:32 CEST 2011
+        - added small safety-check to unreg_cb.
+
 1.22    Thu Mar 10 17:17:58 CET 2011
         - fixed a bug where event methods were not registered correctly.
         - found a bug with using the guard to track cb registrations.

@@ -13,11 +13,11 @@ Object::Event - A class that provides an event callback interface
 
 =head1 VERSION
 
-Version 1.22
+Version 1.23
 
 =cut
 
-our $VERSION = '1.22';
+our $VERSION = '1.23';
 
 =head1 SYNOPSIS
 
@@ -334,6 +334,8 @@ sub unreg_cb {
       $$cb = undef;
       return;
    }
+
+   return unless defined $cb; # some small safety against bad arguments
 
    my $evs = $self->{__oe_events};
 
@@ -929,7 +931,7 @@ Thanks go to:
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009 Robin Redeker, all rights reserved.
+Copyright 2009-2011 Robin Redeker, all rights reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

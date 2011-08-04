@@ -27,4 +27,3 @@ samples/simple_example
 samples/benchmark
 samples/mass_example
 META.yml                                 Module meta-data (added by MakeMaker)
-META.json                                Module meta-data (added by MakeMaker)
